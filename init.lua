@@ -10,7 +10,6 @@
 	
 	Jetpack inspired by jetpack from spirit689 (https://github.com/spirit689/jetpack) 
 	and the historical game Lunar Lander.
-	Starting sound from lextrack (https://freesound.org/s/346323/) CC-0
 	
 ]]--
 
