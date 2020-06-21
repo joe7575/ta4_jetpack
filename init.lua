@@ -24,14 +24,27 @@ local MAX_VSPEED = tonumber(minetest.settings:get("ta4_jetpack_max_vertical_spee
 local MAX_HSPEED = (tonumber(minetest.settings:get("ta4_jetpack_max_horizontal_speed")) or 10) / 4
 local MAX_NUM_INV_ITEMS = tonumber(minetest.settings:get("ta4_jetpack_max_num_inv_items")) or 5
 
-local MAX_FUEL = 20
-local FUEL_UNIT = 4
+local MAX_FUEL = 20   -- units
+local FUEL_UNIT = 4   -- units per click
+local MAX_FLY_STEPS = 3000  -- 5 min
+local FUEL_DEC_LEVEL = MAX_FLY_STEPS / MAX_FUEL
+local WEAR_VALUE = 600   -- roughly 10 flys, 5 min each
+
+local function almost_equal(val1, val2, deviation)
+	return math.abs(val1 - val2) <= (deviation or 0.01)
+end
 
 local function store_player_physics(player)
 	local meta = player:get_meta()
-	local physics = player:get_physics_override()
-	meta:set_int("ta4_jetpack_normal_player_speed", physics.speed)
-	meta:set_int("ta4_jetpack_normal_player_gravity", physics.gravity)
+	-- check collision with other mods
+	if meta:get_int("player_physics_under_control") == 0 then 
+		local physics = player:get_physics_override()
+		meta:set_int("player_physics_under_control", 1)
+		meta:set_int("ta4_jetpack_normal_player_speed", physics.speed)
+		meta:set_int("ta4_jetpack_normal_player_gravity", physics.gravity)
+		return true
+	end
+	return false
 end
 
 local function restore_player_physics(player)
@@ -39,6 +52,7 @@ local function restore_player_physics(player)
 	local physics = player:get_physics_override()
 	physics.speed = meta:get_int("ta4_jetpack_normal_player_speed")
 	physics.gravity = meta:get_int("ta4_jetpack_normal_player_gravity")
+	meta:set_int("player_physics_under_control", 0)
 	player:set_physics_override(physics)
 end
 
@@ -47,6 +61,9 @@ local function turn_jetpack_off(player)
     restore_player_physics(player)
     if Players[name] and Players[name].snd_hdl then
         minetest.sound_stop(Players[name].snd_hdl)
+    end
+    if Players[name] and Players[name].alarm_snd_hdl then
+        minetest.sound_stop(Players[name].alarm_snd_hdl)
     end
 	--Jetpacks[name] = nil
 	Players[name] = nil
@@ -69,85 +86,83 @@ local function turn_inv_controller_off(player)
 	end
 end
 
--- Fuel is stored in the jetpack item as metadata (0..100)
+-- Fuel is stored as metadata (0..100) in the jetpack item located at the armor inventory 
 local function get_fuel_value(name)
-	if Jetpacks[name] and Jetpacks[name].stack then
-		local meta = Jetpacks[name].stack:get_meta()
+	if Jetpacks[name] and Jetpacks[name].index then
+		local index = Jetpacks[name].index
+		local inv = minetest.get_inventory({type = "detached", name = name.."_armor"})
+		local stack = inv:get_stack("armor", index)
+		local meta = stack:get_meta()
 		return meta:get_int("fuel")
 	end
 	return 0
 end
 
 local function set_fuel_value(name, value)
-	if Jetpacks[name] and Jetpacks[name].stack then
-		local meta = Jetpacks[name].stack:get_meta()
+	if Jetpacks[name] and Jetpacks[name].index then
+		local index = Jetpacks[name].index
+		local inv = minetest.get_inventory({type = "detached", name = name.."_armor"})
+		local stack = inv:get_stack("armor", index)
+		local meta = stack:get_meta()
 		meta:set_int("fuel", value)
+		inv:set_stack("armor", index, stack)
 	end
 end
 
 local function dec_fuel_value(name)
-	if Jetpacks[name] and Jetpacks[name].stack then
-		local meta = Jetpacks[name].stack:get_meta()
+	if Jetpacks[name] and Jetpacks[name].index then
+		local index = Jetpacks[name].index
+		local inv = minetest.get_inventory({type = "detached", name = name.."_armor"})
+		local stack = inv:get_stack("armor", index)
+		local meta = stack:get_meta()
 		local value = meta:get_int("fuel")
 		if value > 0 then
 			meta:set_int("fuel", value - 1)
+			inv:set_stack("armor", index, stack)
 			return true
 		end
 	end
 	return false
 end
 
-
 local function fuel_value_to_wearout(value)
 	return math.floor(65533 - (value / MAX_FUEL * 65530))
+end
+
+local function update_controller_fuel_gauge(player, index, value)
+	local inv = player:get_inventory()
+	if inv and index then
+		local stack = inv:get_stack("main", index)
+		if stack:get_name() == "ta4_jetpack:controller_on" then
+			stack:set_wear(fuel_value_to_wearout(value))
+			inv:set_stack("main", index, stack)
+		end
+	end
 end
 
 local function check_player_load(player)
 	local inv = player:get_inventory()
 	local meta = player:get_meta()
 	local bags_meta = meta:get_string("unified_inventory:bags")
-	if next(minetest.deserialize(bags_meta) or {}) then
-		return false  -- player has inventory bags
-	end
-	local count = 0
-	for _, stack in ipairs(inv:get_list("main")) do
-		count = count + stack:is_empty() and 1 or 0
-		if count > MAX_NUM_INV_ITEMS then 
-			return false -- player has to many stacks
+	if bags_meta then
+		if next(minetest.deserialize(bags_meta) or {}) then
+			return S("bags are used!")
 		end
 	end
-	return true
+	for _, stack in ipairs(inv:get_list("craft") or {}) do
+		if not stack:is_empty() then
+			return S("carfting grid is used!")
+		end
+	end
+	local count = 0
+	for _, stack in ipairs(inv:get_list("main") or {}) do
+		count = count + (stack:is_empty() and 0 or 1)
+		if count > MAX_NUM_INV_ITEMS then 
+			return S("more than 5 stacks are used!")
+		end
+	end
 end	
 	
-armor:register_on_equip(function(player, index, stack)
-	print("register_on_equip")
-    if stack:get_name() == 'ta4_jetpack:jetpack' then
-		local name = player:get_player_name()
-		Jetpacks[name] = {stack = stack, index = index}
-        Players[name] = nil
-    end
-end)
-
-armor:register_on_destroy(function(player, index, stack)
-	print("register_on_destroy")
-    if stack:get_name() == 'ta4_jetpack:jetpack' then
-        turn_jetpack_off(player)
-		turn_inv_controller_off(player)
-		local name = player:get_player_name()
-		Jetpacks[name] = nil
-    end
-end)
-
-armor:register_on_unequip(function(player, index, stack)
-	print("register_on_unequip")
-    if stack:get_name() == 'ta4_jetpack:jetpack' then
-        turn_jetpack_off(player)
-		turn_inv_controller_off(player)
-		local name = player:get_player_name()
-		Jetpacks[name] = nil
-    end
-end)
-
 minetest.register_globalstep(function(dtime)
 	for name, def in pairs(Players) do
 		local player = minetest.get_player_by_name(name)
@@ -157,7 +172,7 @@ minetest.register_globalstep(function(dtime)
 		local vel = player:get_player_velocity()
 		local item = player:get_wielded_item()
 		
-		-- This is necessary to be able to handle the jetpack tank 
+		-- The controller as wielded item prevents the player from using other blocks
 		if item:get_name() ~= "ta4_jetpack:controller_on" then
 			-- You shouldn't have done that :)
 			turn_jetpack_off(player)
@@ -197,7 +212,7 @@ minetest.register_globalstep(function(dtime)
 				end
 			end
 				
-			-- handle smoke
+			-- handle smoke and use
 			if ctrl > 0 then
 				minetest.add_particle({
 					pos = pos,
@@ -207,6 +222,7 @@ minetest.register_globalstep(function(dtime)
 					vertical = false,
 					texture = "ta4_jetpack_smoke.png",
 				})
+				def.used = (def.used or 0) + 1
 			end
 			
 			-- control max height
@@ -235,27 +251,61 @@ local function jetpack_wearout()
 	for name, def in pairs(Players) do
 		local player = minetest.get_player_by_name(name)
 		if player and Jetpacks[name] then
-			-- Handle the jetpack wear out
-			armor:damage(player, Jetpacks[name].index, Jetpacks[name].stack, 1000)
+			if def.used and def.used > FUEL_DEC_LEVEL then
+				----------------------------------------------------------------
+				local index = Jetpacks[name].index
+				local inv = minetest.get_inventory({type = "detached", name = name.."_armor"})
+				local stack = inv:get_stack("armor", index)
+				print("used = "..def.used..", value = "..get_fuel_value(name)..", wear = "..stack:get_wear())
+				---------------------------------------------------------------
+				def.used = def.used - FUEL_DEC_LEVEL
+				dec_fuel_value(name)
+				local value = get_fuel_value(name)
+				def.controller_index = def.controller_index or get_inv_controller_index(player)
+				update_controller_fuel_gauge(player, def.controller_index, value)
+				if value == 0 then
+					---- Fly is finished :)
+					turn_jetpack_off(player)
+					turn_inv_controller_off(player)
+				elseif value < 4 then
+					def.alarm_snd_hdl = minetest.sound_play("ta4_jetpack_alarm", {
+							max_hear_distance = 16,
+							gain = 1,
+							object = player,
+						})
+				end
+				-- Handle the jetpack wear out
+				local index = Jetpacks[name] and Jetpacks[name].index or 1
+				local inv = minetest.get_inventory({type = "detached", name = name.."_armor"})
+				local stack = inv:get_stack("armor", index)
+				armor:damage(player, index, stack, WEAR_VALUE)
+			else
+				local value = get_fuel_value(name)
+				if value < 4 then
+					def.alarm_snd_hdl = minetest.sound_play("ta4_jetpack_alarm", {
+							max_hear_distance = 16,
+							gain = 1,
+							object = player,
+						})
+				end
+			end
 			
-			-- handle the fuel gauge
-			local inv = player:get_inventory()
-			local index = def.controller_index
-			if inv and index then
-				local stack = inv:get_stack("main", index)
-				if stack:get_name() ~= "ta4_jetpack:controller_on" then
-					-- TODO wear vom jetpack prüfen
-					local value = get_fuel_value(name)
-					stack:add_wear(fuel_value_to_wearout(value))
-					inv:set_stack("main", index, stack)
+			-- check if player is controlled by another mod
+			if def.correction == false then
+				local physics = player:get_physics_override()
+				if not almost_equal(physics.gravity, def.gravity) or 
+						not almost_equal(physics.speed, def.speed) then
+					---- Fly is finished
+					turn_jetpack_off(player)
+					turn_inv_controller_off(player)
 				end
 			end
 		end
 	end
-	minetest.after(10, jetpack_wearout)
+	minetest.after(8, jetpack_wearout)
 end
 
-minetest.after(10, jetpack_wearout)
+minetest.after(8, jetpack_wearout)
 
 local function load_fuel(itemstack, user, pointed_thing)
 	local pos = pointed_thing.under
@@ -288,7 +338,19 @@ local function turn_controller_on_off(itemstack, user)
 	if Players[name] then -- turn off
 		turn_jetpack_off(user)
 		itemstack = ItemStack("ta4_jetpack:controller_off 1 0")
-	elseif Jetpacks[name] then -- jetpack available?
+	else
+		-- check jetpack
+		if not Jetpacks[name] then 
+			minetest.chat_send_player(name, S("[Jetpack] You don't have your jetpack on your back!"))
+			return itemstack
+		end
+		-- check inventory load
+		local res = check_player_load(user) 
+		if res then
+			minetest.chat_send_player(name, S("[Jetpack] You are too heavy: ")..res)
+			return itemstack
+		end
+		-- check fuel
 		local value = get_fuel_value(name)
 		if value == 0 then
 			minetest.chat_send_player(name, S("[Jetpack] Your tank is empty!"))
@@ -296,25 +358,23 @@ local function turn_controller_on_off(itemstack, user)
 			return itemstack
 		end
 		-- start the jetpack
-		store_player_physics(user)
-		Players[name] = {gravity = 1, speed = 1}
-		Players[name].controller_index = get_inv_controller_index(user)
-		minetest.sound_play("ta4_jetpack_on", {
-			max_hear_distance = 16,
-			gain = 1,
-			object = user,
-		})	
-		-- update fuel gauge
-		itemstack = ItemStack("ta4_jetpack:controller_on")
-		itemstack:add_wear(fuel_value_to_wearout(value))
-	else
-		minetest.chat_send_player(name, S("[Jetpack] You don't have your jetpack on your back!"))
+		if store_player_physics(user) then
+			Players[name] = {gravity = 1, speed = 1}
+			minetest.sound_play("ta4_jetpack_on", {
+				max_hear_distance = 16,
+				gain = 1,
+				object = user,
+			})	
+			-- update fuel gauge
+			itemstack = ItemStack("ta4_jetpack:controller_on")
+			itemstack:set_wear(fuel_value_to_wearout(value))
+		end
 	end
 	return itemstack
 end
 
 minetest.register_tool("ta4_jetpack:controller_on", {
-	description = "TA4 Jetpack Controller On",
+	description = S("TA4 Jetpack Controller On"),
 	inventory_image = "ta4_jetpack_controller_inv.png",
 	wield_image = "ta4_jetpack_controller_inv.png",
 	groups =  {cracky = 1, wieldview_transform = 1, not_in_creative_inventory = 1},
@@ -328,7 +388,7 @@ minetest.register_tool("ta4_jetpack:controller_on", {
 })
 
 minetest.register_tool("ta4_jetpack:controller_off", {
-	description = "TA4 Jetpack Controller Off",
+	description = S("TA4 Jetpack Controller Off"),
 	inventory_image = "ta4_jetpack_controller_off_inv.png",
 	wield_image = "ta4_jetpack_controller_off_inv.png",
 	groups = {cracky = 1, wieldview_transform = 1},
@@ -340,10 +400,27 @@ minetest.register_tool("ta4_jetpack:controller_off", {
 })
 
 armor:register_armor("ta4_jetpack:jetpack", {
-    description = "TA4 Jetpack",
+    description = S("TA4 Jetpack"),
     texture = "ta4_jetpack_jetpack.png",
     inventory_image = "ta4_jetpack_jetpack_inv.png",
     groups = {armor_torso=1, armor_heal=0, armor_use=100},
+	on_equip = function(player, index, stack)
+		local name = player:get_player_name()
+		Jetpacks[name] = {index = index}
+        Players[name] = nil
+	end,
+	on_unequip = function(player, index, stack)
+        turn_jetpack_off(player)
+		turn_inv_controller_off(player)
+		local name = player:get_player_name()
+		Jetpacks[name] = nil
+	end,
+	on_destroy = function(player, index, stack)
+        turn_jetpack_off(player)
+		turn_inv_controller_off(player)
+		local name = player:get_player_name()
+		Jetpacks[name] = nil
+	end
 })
 
 -- For some reason, prevent to move/put/take a running controller
@@ -352,10 +429,6 @@ minetest.register_allow_player_inventory_action(function(player, action, invento
 		return 0
 	end
 end)
-
---
--- Determine the ground below the player for the next respawn
---
 
 local function reset_player(player)
 	local name = player:get_player_name()
@@ -407,17 +480,27 @@ minetest.register_on_joinplayer(function(player)
 	end
 end)
 
----- Fly is finished :)
---minetest.register_on_dieplayer(function(player, reason)
---	local name = player:get_player_name()
-	
---	if Players[name] then
---		-- Turn Jetpack off
---		Players[name] = nil
---		Jetpacks[name] = nil
---		turn_inv_controller_off(player)
---	end
---end)
+minetest.register_node("ta4_jetpack:jumpingmat", {
+	description = S("Jetpack Jumping Mat"),
+	tiles = {
+		"ta4_jetpack_mat_top.png", 
+		"ta4_jetpack_mat_top.png", 
+		"ta4_jetpack_mat_side.png"
+	},
+	drawtype = "nodebox",
+	node_box = {
+		type = "fixed",
+		fixed = {
+			{-8/16, -8/16, -8/16, 8/16, -2/16,  8/16},
+		},
+	},
+	walkable = true,
+	paramtype = "light",
+	sunlight_propagates = true,
+	is_ground_content = false,
+	groups = {cracky = 3, oddly_breakable_by_hand = 1, fall_damage_add_percent = -80, bouncy = 40},
+})
+
 
 techage.register_liquid("techage:cylinder_large_hydrogen", "techage:ta3_cylinder_large", 6, "techage:hydrogen")
 
