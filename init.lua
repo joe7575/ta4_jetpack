@@ -7,10 +7,7 @@
 
 	GPL v3
 	See LICENSE.txt for more information
-	
-	Jetpack inspired by jetpack from spirit689 (https://github.com/spirit689/jetpack) 
-	and the historical game Lunar Lander.
-	
+
 ]]--
 
 -- Load support for I18n.
@@ -37,9 +34,9 @@ local WEAR_VALUE = 180   -- roughly 10 flys, 6 min each
 local function store_player_physics(player)
 	local meta = player:get_meta()
 	-- Check access conflicts with other mods
-	if meta:get_int("player_physics_under_control") == 0 then 
+	if meta:get_int("player_physics_locked") == 0 then 
 		local physics = player:get_physics_override()
-		meta:set_int("player_physics_under_control", 1)
+		meta:set_int("player_physics_locked", 1)
 		meta:set_int("ta4_jetpack_normal_player_speed", physics.speed)
 		meta:set_int("ta4_jetpack_normal_player_gravity", physics.gravity)
 		return true
@@ -52,7 +49,7 @@ local function restore_player_physics(player)
 	local physics = player:get_physics_override()
 	physics.speed = meta:get_int("ta4_jetpack_normal_player_speed")
 	physics.gravity = meta:get_int("ta4_jetpack_normal_player_gravity")
-	meta:set_int("player_physics_under_control", 0)
+	meta:set_int("player_physics_locked", 0)
 	player:set_physics_override(physics)
 end
 
@@ -146,19 +143,19 @@ local function check_player_load(player)
 	local bags_meta = meta:get_string("unified_inventory:bags")
 	if bags_meta then
 		if next(minetest.deserialize(bags_meta) or {}) then
-			return S("bags are used!")
+			return S("check your bags!")
 		end
 	end
 	for _, stack in ipairs(inv:get_list("craft") or {}) do
 		if not stack:is_empty() then
-			return S("carfting grid is used!")
+			return S("check your carfting menu!")
 		end
 	end
 	local count = 0
 	for _, stack in ipairs(inv:get_list("main") or {}) do
 		count = count + (stack:is_empty() and 0 or 1)
 		if count > MAX_NUM_INV_ITEMS then 
-			return S("more than 5 stacks are used!")
+			return S("check your inventory!")
 		end
 	end
 end	
@@ -502,29 +499,29 @@ minetest.register_node("ta4_jetpack:trainingmat", {
 	groups = {cracky = 3, oddly_breakable_by_hand = 1, fall_damage_add_percent = -80, bouncy = 40},
 })
 
---minetest.register_craft({
---	output = "ta4_jetpack:jetpack",
---	recipe = {
---		{"technic:carbon_steel_ingot", "jetpack:battery", "technic:carbon_steel_ingot"},
---		{"jetpack:motor", "technic:mv_cable", "jetpack:motor"},
---		{"", "", ""}
---	},
---})
+minetest.register_craft({
+	output = "ta4_jetpack:jetpack",
+	recipe = {
+		{"techage:ta4_carbon_fiber", "", "techage:ta4_carbon_fiber"},
+		{"techage:aluminum", "techage:ta3_cylinder_large", "techage:aluminum"},
+		{"basic_materials:motor", "basic_materials:steel_bar", "basic_materials:motor"}
+	},
+})
 
---minetest.register_craft({
---	output = "ta4_jetpack:controller_off",
---	recipe = {
---		{"technic:carbon_steel_ingot", "jetpack:battery", "technic:carbon_steel_ingot"},
---		{"jetpack:motor", "technic:mv_cable", "jetpack:motor"},
---		{"", "", ""}
---	},
---})
+minetest.register_craft({
+	output = "ta4_jetpack:controller_off",
+	recipe = {
+		{"basic_materials:plastic_sheet", "techage:basalt_glass_thin", "basic_materials:plastic_sheet"},
+		{"techage:ta4_wlanchip", "techage:ta4_battery", "techage:ta4_ramchip"},
+		{"", "", ""}
+	},
+})
 
---minetest.register_craft({
---	output = "ta4_jetpack:trainingmat",
---	recipe = {
---		{"technic:carbon_steel_ingot", "jetpack:battery", "technic:carbon_steel_ingot"},
---		{"jetpack:motor", "technic:mv_cable", "jetpack:motor"},
---		{"", "", ""}
---	},
---})
+minetest.register_craft({
+	output = "ta4_jetpack:trainingmat",
+	recipe = {
+		{"dye:green", "dye:green", "dye:green"},
+		{"techage:ta4_carbon_fiber", "techage:ta4_carbon_fiber", "techage:ta4_carbon_fiber"},
+		{"basic_materials:plastic_sheet", "basic_materials:plastic_sheet", "basic_materials:plastic_sheet"}
+	},
+})
