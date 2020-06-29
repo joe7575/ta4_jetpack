@@ -22,6 +22,7 @@ Important to know:
 - Maximum 5 items stacks in your inventory are allowed including the controller.
   Otherwise you would be too heavy :-)
 - The Jetpack also wears out and can be used for approximately 10 flights
+- Always hold the controller tight during the flight, otherwise it will switch off :)
 
 
 ### License
