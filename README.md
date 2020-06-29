@@ -3,7 +3,7 @@
 **A Jetpack for techage with hydrogen as fuel and TA4 recipe**
 
 
-![screenshot](https://github.com/joe7575/jetpack/blob/master/screenshot.png)
+![screenshot](https://github.com/joe7575/ta4_jetpack/blob/master/screenshot.png)
 
 The Jetpack is inspired by the jetpack from spirit689 (https://github.com/spirit689/jetpack)
 and by the historical game Lunar Lander.
