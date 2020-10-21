@@ -16,6 +16,8 @@ and by the historical game Lunar Lander.
 - Before your first flight you should do some training starts and landings on the Training Mat 
   (The Jetpack is a bit stubborn, it takes some practice to keep the JetPack in the air) 
 
+[ta4_jetpack_controller|image]
+
   
 ## Important to know
 
@@ -25,3 +27,4 @@ and by the historical game Lunar Lander.
 - The Jetpack also wears out and can be used for approximately 10 flights
 - Always hold the controller tight during the flight, otherwise it will switch off :)
 
+[ta4_jetpack_controller|image]

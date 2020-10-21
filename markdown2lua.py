@@ -1,9 +1,10 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-#
 
 import re
-import mistune
+import mistune # install v0.8.4 with: pip install mistune
+
+__version__ = "1.0"
 
 class WikiLinkInlineLexer(mistune.InlineLexer):
     def enable_wiki_link(self):
@@ -27,10 +28,8 @@ class WikiLinkInlineLexer(mistune.InlineLexer):
         return self.renderer.wiki_link(name, itype)
 
 class MarkdownToLua(mistune.Renderer):
-    def __init__(self, mod_name, dst_file_name, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         mistune.Renderer.__init__(self, *args, **kwargs)
-        self.mod_name = mod_name
-        self.dst_file_name = dst_file_name
         self.item_name = ""
         self.plan_table = ""
         self.is_first_header = True
@@ -39,6 +38,7 @@ class MarkdownToLua(mistune.Renderer):
         self.lText = []
         self.lItemName = []
         self.lPlanTable = []
+        print("Markdown-to-Lua v%s" % __version__)
 
     def m2l_formspec_escape(self, text):
         text = text.replace("\\", "")
@@ -147,7 +147,7 @@ class MarkdownToLua(mistune.Renderer):
         pass
 
     def parse_md_file(self, src_name):
-        print("Read Lua file '%s'" % src_name)
+        print(" - Read MD file '%s'" % src_name)
         inline = WikiLinkInlineLexer(self)
         # enable the feature
         inline.enable_wiki_link()
@@ -178,17 +178,22 @@ class MarkdownToLua(mistune.Renderer):
         lOut.append("}")
         return "\n".join(lOut)
 
-    def gen_lua_file(self, dest_name):
-        print("Write Lua file '%s'" % dest_name)
+    def gen_lua_file(self, dest_name, language="EN"):
+        print(" - Write Lua file '%s'" % dest_name)
         lOut = []
         s = ", ".join([self.lua_table(self.lTitle), 
                        self.lua_text_table(self.lText), 
                        self.lua_table(self.lItemName), 
                        self.lua_table(self.lPlanTable)])
-        open(dest_name, "w").write("techage.add_to_manual('EN', %s)\n" % s)
+        open(dest_name, "w").write("techage.add_to_manual('%s', %s)\n" % (language, s))
+        print("done.")
     
 
-m2l = MarkdownToLua("ta4_jetpack", "manual")
-m2l.parse_md_file("./manual.md")
-m2l.gen_lua_file("./manual.lua")
+m2l = MarkdownToLua()
+m2l.parse_md_file("./manual_EN.md")
+m2l.gen_lua_file("./manual_EN.lua", "EN")
+
+m2l = MarkdownToLua()
+m2l.parse_md_file("./manual_DE.md")
+m2l.gen_lua_file("./manual_DE.lua", "DE")
 
