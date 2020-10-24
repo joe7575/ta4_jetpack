@@ -19,7 +19,7 @@ local Jetpacks = {}
 local MAX_HEIGHT = tonumber(minetest.settings:get("ta4_jetpack_max_height")) or 500
 local MAX_VSPEED = tonumber(minetest.settings:get("ta4_jetpack_max_vertical_speed")) or 20
 local MAX_HSPEED = (tonumber(minetest.settings:get("ta4_jetpack_max_horizontal_speed")) or 12) / 4
-local MAX_NUM_INV_ITEMS = tonumber(minetest.settings:get("ta4_jetpack_max_num_inv_items")) or 5
+local MAX_NUM_INV_ITEMS = tonumber(minetest.settings:get("ta4_jetpack_max_num_inv_items")) or 99
 
 -- Flight time maximum 6 min or 360 s or 3600 steps.
 -- 12 units hydrogen for 3600 steps means 0.0033 units hydrogen / step.
@@ -153,7 +153,7 @@ local function check_player_load(player)
 	end
 	local count = 0
 	for _, stack in ipairs(inv:get_list("main") or {}) do
-		count = count + (stack:is_empty() and 0 or 1)
+		count = count + stack:get_count()
 		if count > MAX_NUM_INV_ITEMS then 
 			return S("check your inventory!")
 		end
