@@ -13,8 +13,11 @@
 -- Load support for I18n.
 local S = minetest.get_translator("ta4_jetpack")
 
+local ta4_jetpack = {}
+
 local Players = {}
 local Jetpacks = {}
+local ItemsBlocklist = {}
 
 local MAX_HEIGHT = tonumber(minetest.settings:get("ta4_jetpack_max_height")) or 500
 local MAX_VSPEED = tonumber(minetest.settings:get("ta4_jetpack_max_vertical_speed")) or 20
@@ -30,6 +33,11 @@ local WEAR_CYCLE = 10  -- check wear every 10 sec
 local STEPS_TO_FUEL = 0.0033
 
 local WEAR_VALUE = 180   -- roughly 10 flys, 6 min each
+
+-- API function to register items that are forbidden in inventory during flight.
+ta4_jetpack.register_forbidden_item = function(itemname)
+	ItemsBlocklist[itemname] = true
+end
 
 local function store_player_physics(player)
 	local meta = player:get_meta()
@@ -143,19 +151,22 @@ local function check_player_load(player)
 	local bags_meta = meta:get_string("unified_inventory:bags")
 	if bags_meta then
 		if next(minetest.deserialize(bags_meta) or {}) then
-			return S("check your bags!")
+			return S("You are too heavy: Check your bags!")
 		end
 	end
 	for _, stack in ipairs(inv:get_list("craft") or {}) do
 		if not stack:is_empty() then
-			return S("check your carfting menu!")
+			return S("You are too heavy: Check your crafting menu!")
 		end
 	end
 	local count = 0
 	for _, stack in ipairs(inv:get_list("main") or {}) do
 		count = count + stack:get_count()
 		if count > MAX_NUM_INV_ITEMS then 
-			return S("check your inventory!")
+			return S("You are too heavy: Check your inventory!")
+		end
+		if ItemsBlocklist[stack:get_name()] then
+			return S("You may not transport @1 with a jetpack!", stack:get_description())
 		end
 	end
 end	
@@ -349,7 +360,7 @@ local function turn_controller_on_off(itemstack, user)
 		-- check inventory load
 		local res = check_player_load(user) 
 		if res then
-			minetest.chat_send_player(name, S("[Jetpack] You are too heavy: ")..res)
+			minetest.chat_send_player(name, S("[Jetpack]").." "..res)
 			return itemstack
 		end
 		-- check fuel
@@ -533,3 +544,6 @@ techage.add_manual_items({
 		ta4_jetpack = "ta4_jetpack.png",
 		ta4_jetpack_controller = 'ta4_jetpack_controller_inv.png'})
 
+ta4_jetpack.register_forbidden_item("techage:cylinder_large_hydrogen")
+ta4_jetpack.register_forbidden_item("techage:cylinder_small_hydrogen")
+ta4_jetpack.register_forbidden_item("techage:hydrogen")
