@@ -334,11 +334,11 @@ local function load_fuel(itemstack, user, pointed_thing)
 			local newvalue
 			
 			if user:get_player_control().sneak then -- back to tank?
-				local amount = math.min(value, FUEL_UNIT)
+				local amount = math.min(value, FUEL_UNIT) or 0
 				local rest = liquid.srv_put(nvm, "techage:hydrogen", amount, MAX_FUEL)
 				newvalue = value - amount + rest
 			else
-				local amount = math.min(FUEL_UNIT, MAX_FUEL - value)
+				local amount = math.min(FUEL_UNIT, MAX_FUEL - value) or 0
 				local taken = liquid.srv_take(nvm, "techage:hydrogen", amount)
 				newvalue = value + taken
 			end
